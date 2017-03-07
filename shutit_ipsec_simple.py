@@ -151,7 +151,7 @@ end''')
 #	leftrsasigkey=0sAQOrlo+hOafUZDlCQmXFrje/oZm [...] W2n417C/4urYHQkCvuIQ==
 #[root@west ~]# 
 		shutit.send('ipsec newhostkey --output /etc/ipsec.secrets')
-		leftrsasigkey = shutit.send_and_get_output('ipsec showhostkey --left | grep leftrsasigkey=')
+		leftrsasigkey = shutit.send_and_get_output('ipsec showhostkey --left 2> /dev/null | grep leftrsasigkey=')
 		shutit.logout()
 		shutit.logout()
 
