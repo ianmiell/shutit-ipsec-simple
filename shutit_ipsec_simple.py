@@ -123,42 +123,59 @@ end''')
 					shutit.multisend('ssh-copy-id root@' + machines[copy_to_machine][item],{'assword:':root_password,'ontinue conn':'yes'})
 			shutit.logout()
 			shutit.logout()
-		shutit.login(command='vagrant ssh ' + sorted(machines.keys())[0])
-		shutit.login(command='sudo su -',password='vagrant')
-		shutit.logout()
-		shutit.logout()
-		shutit.log('''Vagrantfile created in: ''' + this_vagrant_run_dir,add_final_message=True,level=logging.DEBUG)
-		shutit.log('''Run:
 
-	cd ''' + this_vagrant_run_dir + ''' && vagrant status && vagrant landrush ls
-
-To get a picture of what has been set up.''',add_final_message=True,level=logging.DEBUG)
+		for machine_number in (0,1):
+			shutit.login(command='vagrant ssh ' + sorted(machines.keys())[machine_number])
+			shutit.login(command='sudo su -',password='vagrant')
+			shutit.install('wget')
+			shutit.send('wget -qO- https://download.libreswan.org/libreswan-3.10.tar.gz | tar -zxvf -')
+			shutit.install('libnss3-dev libnspr4-dev pkg-config libpam-dev libcap-ng-dev libcap-ng-utils libselinux-dev libcurl4-nss-dev libgmp3-dev flex bison gcc make libunbound-dev libnss3-tools')
+			shutit.send('cd libreswan-3.10')
+			shutit.send('make program')
+			shutit.send('make install')
+			shutit.logout()
+			shutit.logout()
 
 		# TODO: https://libreswan.org/wiki/Configuration_examples
 		# TODO: https://libreswan.org/wiki/Host_to_host_VPN
+		# Log onto 'left' server
+		shutit.login(command='vagrant ssh ' + sorted(machines.keys())[0])
+		shutit.login(command='sudo su -',password='vagrant')
+#serverleft
+#[root@west ~]# ipsec newhostkey --output /etc/ipsec.secrets
+#Generated RSA key pair using the NSS database
+#[root@west ~]# ipsec showhostkey --left
+#	# rsakey AQOrlo+hO
+#	leftrsasigkey=0sAQOrlo+hOafUZDlCQmXFrje/oZm [...] W2n417C/4urYHQkCvuIQ==
+#[root@west ~]# 
+		shutit.send('ipsec newhostkey --output /etc/ipsec.secrets')
+		leftrsasigkey = shutit.send_and_get_output('ipsec showhostkey --left')
+		shutit.logout()
+		shutit.logout()
 
-serverleft
-[root@west ~]# ipsec newhostkey --output /etc/ipsec.secrets
-Generated RSA key pair using the NSS database
-[root@west ~]# ipsec showhostkey --left
-	# rsakey AQOrlo+hO
-	leftrsasigkey=0sAQOrlo+hOafUZDlCQmXFrje/oZm [...] W2n417C/4urYHQkCvuIQ==
-[root@west ~]# 
+		shutit.login(command='vagrant ssh ' + sorted(machines.keys())[1])
+		shutit.login(command='sudo su -',password='vagrant')
+#[root@east ~]# ipsec newhostkey --output /etc/ipsec.secrets
+#Generated RSA key pair using the NSS database
+#[root@east ~]# ipsec showhostkey --right
+#	# rsakey AQO3fwC6n
+#	rightrsasigkey=0sAQO3fwC6nSSGgt64DWiYZzuHbc4 [...] D/v8t5YTQ==
+		shutit.send('ipsec newhostkey --output /etc/ipsec.secrets')
+		rightrsasigkey = shutit.send_and_get_output('ipsec showhostkey --right')
+		shutit.logout()
+		shutit.logout()
 
+        # You should now have a file called /etc/ipsec.secrets on both sides, which contain the public component of the RSA key.
+		# The secret part is stored in /etc/ipsec.d/*.db files, also called the "NSS database".
+		# You can protect this database with a passphrase if you want, but it will prevent the machine from bringing up the tunnel on boot, as a human would need to enter the passphrase.
+		# Note that on older openswan versions compiled without HAVE_NSS, the /etc/ipsec.secret file actually contains the secret part of the rsa keypair as well.
 
-serverright
-[root@east ~]# ipsec newhostkey --output /etc/ipsec.secrets
-Generated RSA key pair using the NSS database
-[root@east ~]# ipsec showhostkey --right
-	# rsakey AQO3fwC6n
-	rightrsasigkey=0sAQO3fwC6nSSGgt64DWiYZzuHbc4 [...] D/v8t5YTQ==
-
-
-You should now have a file called /etc/ipsec.secrets on both sides, which contain the public component of the RSA key. The secret part is stored in /etc/ipsec.d/*.db files, also called the "NSS database". You can protect this database with a passphrase if you want, but it will prevent the machine from bringing up the tunnel on boot, as a human would need to enter the passphrase. Note that on older openswan versions compiled without HAVE_NSS, the /etc/ipsec.secret file actually contains the secret part of the rsa keypair as well.
-
-Now we are ready to make a simple /etc/ipsec.conf file for our host to host tunnel. The leftrsasigkey/rightrsasigkey from above, are added to the configuration below.
-
-# /etc/ipsec.conf
+		# Now we are ready to make a simple /etc/ipsec.conf file for our host to host tunnel. The leftrsasigkey/rightrsasigkey from above, are added to the configuration below.
+		# You can use the identical configuration file on both east and west. They will auto-detect if they are "left" or "right".
+		for machine_number in (0,1):
+			shutit.login(command='vagrant ssh ' + sorted(machines.keys())[machine_number])
+			shutit.login(command='sudo su -',password='vagrant')
+			shutit.send_file('/etc/ipsec.conf','''# /etc/ipsec.conf
 # The version 2 is only required for compatibility with openswan
 version 2
 
@@ -168,42 +185,56 @@ config setup
 conn mytunnel
     leftid=@west
     left=192.1.2.23
-    leftrsasigkey=0sAQOrlo+hOafUZDlCQmXFrje/oZm [...] W2n417C/4urYHQkCvuIQ==
+    leftrsasigkey=''' + leftrsasigkey + '''
     rightid=@east
     right=192.1.2.45
-    rightrsasigkey=0sAQO3fwC6nSSGgt64DWiYZzuHbc4 [...] D/v8t5YTQ==
+    rightrsasigkey=''' + rightrsasigkey + '''
     authby=rsasig
     # use auto=start when done testing the tunnel
     auto=add
+''')
+			shutit.logout()
+			shutit.logout()
+
+		# Just on the first node?
+		for machine_number in (0,):
+			shutit.login(command='vagrant ssh ' + sorted(machines.keys())[machine_number])
+			shutit.login(command='sudo su -',password='vagrant')
+			# First, ensure ipsec is started:
+			shutit.send('ipsec setup start')
+			# Then ensure the connection loaded:
+			shutit.send('ipsec auto --add mytunnel')
+			# And then try and bring up the tunnel:
+			shutit.send('ipsec auto --up mytunnel')
+			shutit.logout()
+			shutit.logout()
 
 
 
-You can use the identical configuration file on both east and west. They will auto-detect if they are "left" or "right".
-
-First, ensure ipsec is started:
-
-ipsec setup start
-Then ensure the connection loaded:
-
-ipsec auto --add mytunnel
-And then try and bring up the tunnel:
-
-ipsec auto --up mytunnel
-If all went well, you should see something like:
-
-# ipsec auto --up  mytunnel
-104 "mytunnel" #1: STATE_MAIN_I1: initiate
-003 "mytunnel" #1: received Vendor ID payload [Dead Peer Detection]
-003 "mytunnel" #1: received Vendor ID payload [FRAGMENTATION]
-106 "mytunnel" #1: STATE_MAIN_I2: sent MI2, expecting MR2
-108 "mytunnel" #1: STATE_MAIN_I3: sent MI3, expecting MR3
-003 "mytunnel" #1: received Vendor ID payload [CAN-IKEv2]
-004 "mytunnel" #1: STATE_MAIN_I4: ISAKMP SA established {auth=RSA_SIG cipher=aes_128 prf=sha group=MODP2048}
-117 "mytunnel" #2: STATE_QUICK_I1: initiate
-004 "mytunnel" #2: STATE_QUICK_I2: sent QI2, IPsec SA established tunnel mode {ESP=>0xESPESP<0xESPESP xfrm=AES_128-HMAC_SHA1 NATOA=none NATD=none DPD=passive}
-If you want the tunnel to start when the machine starts, change "auto=add" to "auto=start". Also ensure that your system starts the ipsec service on boot. This can be done using the "service" or "systemctl" command, depending on the init system used for the server.
 
 
+#If all went well, you should see something like:
+#
+## ipsec auto --up  mytunnel
+#104 "mytunnel" #1: STATE_MAIN_I1: initiate
+#003 "mytunnel" #1: received Vendor ID payload [Dead Peer Detection]
+#003 "mytunnel" #1: received Vendor ID payload [FRAGMENTATION]
+#106 "mytunnel" #1: STATE_MAIN_I2: sent MI2, expecting MR2
+#108 "mytunnel" #1: STATE_MAIN_I3: sent MI3, expecting MR3
+#003 "mytunnel" #1: received Vendor ID payload [CAN-IKEv2]
+#004 "mytunnel" #1: STATE_MAIN_I4: ISAKMP SA established {auth=RSA_SIG cipher=aes_128 prf=sha group=MODP2048}
+#117 "mytunnel" #2: STATE_QUICK_I1: initiate
+#004 "mytunnel" #2: STATE_QUICK_I2: sent QI2, IPsec SA established tunnel mode {ESP=>0xESPESP<0xESPESP xfrm=AES_128-HMAC_SHA1 NATOA=none NATD=none DPD=passive}
+#If you want the tunnel to start when the machine starts, change "auto=add" to "auto=start". Also ensure that your system starts the ipsec service on boot. This can be done using the "service" or "systemctl" command, depending on the init system used for the server.
+
+
+
+		shutit.log('''Vagrantfile created in: ''' + this_vagrant_run_dir,add_final_message=True,level=logging.DEBUG)
+		shutit.log('''Run:
+
+	cd ''' + this_vagrant_run_dir + ''' && vagrant status && vagrant landrush ls
+
+To get a picture of what has been set up.''',add_final_message=True,level=logging.DEBUG)
 
 
 		return True
@@ -213,7 +244,7 @@ If you want the tunnel to start when the machine starts, change "auto=add" to "a
 		shutit.get_config(self.module_id,'vagrant_image',default='ubuntu/xenial64')
 		shutit.get_config(self.module_id,'vagrant_provider',default='virtualbox')
 		shutit.get_config(self.module_id,'gui',default='false')
-		shutit.get_config(self.module_id,'memory',default='1024')
+		shutit.get_config(self.module_id,'memory',default='256')
 		shutit.get_config(self.module_id,'vagrant_run_dir',default='/tmp')
 		shutit.get_config(self.module_id,'this_vagrant_run_dir',default='/tmp')
 		return True
