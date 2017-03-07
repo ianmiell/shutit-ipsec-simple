@@ -131,8 +131,10 @@ end''')
 			shutit.send('wget -qO- https://download.libreswan.org/libreswan-3.10.tar.gz | tar -zxvf -')
 			shutit.install('libnss3-dev libnspr4-dev pkg-config libpam-dev libcap-ng-dev libcap-ng-utils libselinux-dev libcurl4-nss-dev libgmp3-dev flex bison gcc make libunbound-dev libnss3-tools')
 			shutit.send('cd libreswan-3.10')
-			shutit.send('make program')
+			shutit.send('make programs')
 			shutit.send('make install')
+			shutit.send('systemctl enable ipsec.service')
+			shutit.send('systemctl start ipsec.service')
 			shutit.logout()
 			shutit.logout()
 
@@ -149,7 +151,7 @@ end''')
 #	leftrsasigkey=0sAQOrlo+hOafUZDlCQmXFrje/oZm [...] W2n417C/4urYHQkCvuIQ==
 #[root@west ~]# 
 		shutit.send('ipsec newhostkey --output /etc/ipsec.secrets')
-		leftrsasigkey = shutit.send_and_get_output('ipsec showhostkey --left')
+		leftrsasigkey = shutit.send_and_get_output('ipsec showhostkey --left | grep leftrsasigkey=')
 		shutit.logout()
 		shutit.logout()
 
@@ -161,7 +163,7 @@ end''')
 #	# rsakey AQO3fwC6n
 #	rightrsasigkey=0sAQO3fwC6nSSGgt64DWiYZzuHbc4 [...] D/v8t5YTQ==
 		shutit.send('ipsec newhostkey --output /etc/ipsec.secrets')
-		rightrsasigkey = shutit.send_and_get_output('ipsec showhostkey --right')
+		rightrsasigkey = shutit.send_and_get_output('ipsec showhostkey --right | grep rightrsasigkey=')
 		shutit.logout()
 		shutit.logout()
 
@@ -185,7 +187,7 @@ config setup
 conn mytunnel
     leftid=@west
     left=192.1.2.23
-    leftrsasigkey=''' + leftrsasigkey + '''
+''' + leftrsasigkey + '''
     rightid=@east
     right=192.1.2.45
     rightrsasigkey=''' + rightrsasigkey + '''
