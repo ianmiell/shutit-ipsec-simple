@@ -163,7 +163,7 @@ end''')
 #	# rsakey AQO3fwC6n
 #	rightrsasigkey=0sAQO3fwC6nSSGgt64DWiYZzuHbc4 [...] D/v8t5YTQ==
 		shutit.send('ipsec newhostkey --output /etc/ipsec.secrets')
-		rightrsasigkey = shutit.send_and_get_output('ipsec showhostkey --right | grep rightrsasigkey=')
+		rightrsasigkey = shutit.send_and_get_output('ipsec showhostkey --right 2> /dev/null | grep rightrsasigkey=')
 		shutit.logout()
 		shutit.logout()
 
@@ -187,10 +187,10 @@ config setup
 conn mytunnel
     leftid=@west
     left=192.1.2.23
-''' + leftrsasigkey + '''
+    ''' + leftrsasigkey + '''
     rightid=@east
     right=192.1.2.45
-    rightrsasigkey=''' + rightrsasigkey + '''
+    ''' + rightrsasigkey + '''
     authby=rsasig
     # use auto=start when done testing the tunnel
     auto=add
@@ -202,8 +202,6 @@ conn mytunnel
 		for machine_number in (0,):
 			shutit.login(command='vagrant ssh ' + sorted(machines.keys())[machine_number])
 			shutit.login(command='sudo su -',password='vagrant')
-			# First, ensure ipsec is started:
-			shutit.send('ipsec setup start')
 			# Then ensure the connection loaded:
 			shutit.send('ipsec auto --add mytunnel')
 			# And then try and bring up the tunnel:
