@@ -139,29 +139,18 @@ end''')
 			shutit.logout()
 
 		# TODO: https://libreswan.org/wiki/Configuration_examples
-		# TODO: https://libreswan.org/wiki/Host_to_host_VPN
+		# https://libreswan.org/wiki/Host_to_host_VPN
 		# Log onto 'left' server
 		shutit.login(command='vagrant ssh ' + sorted(machines.keys())[0])
 		shutit.login(command='sudo su -',password='vagrant')
-#serverleft
-#[root@west ~]# ipsec newhostkey --output /etc/ipsec.secrets
-#Generated RSA key pair using the NSS database
-#[root@west ~]# ipsec showhostkey --left
-#	# rsakey AQOrlo+hO
-#	leftrsasigkey=0sAQOrlo+hOafUZDlCQmXFrje/oZm [...] W2n417C/4urYHQkCvuIQ==
-#[root@west ~]# 
 		shutit.send('ipsec newhostkey --output /etc/ipsec.secrets')
 		leftrsasigkey = shutit.send_and_get_output('ipsec showhostkey --left 2> /dev/null | grep leftrsasigkey=')
 		shutit.logout()
 		shutit.logout()
 
+		# Log onto 'right' server
 		shutit.login(command='vagrant ssh ' + sorted(machines.keys())[1])
 		shutit.login(command='sudo su -',password='vagrant')
-#[root@east ~]# ipsec newhostkey --output /etc/ipsec.secrets
-#Generated RSA key pair using the NSS database
-#[root@east ~]# ipsec showhostkey --right
-#	# rsakey AQO3fwC6n
-#	rightrsasigkey=0sAQO3fwC6nSSGgt64DWiYZzuHbc4 [...] D/v8t5YTQ==
 		shutit.send('ipsec newhostkey --output /etc/ipsec.secrets')
 		rightrsasigkey = shutit.send_and_get_output('ipsec showhostkey --right 2> /dev/null | grep rightrsasigkey=')
 		shutit.logout()
@@ -186,10 +175,10 @@ config setup
 
 conn mytunnel
     leftid=@west
-    left=192.1.2.23
+    left=''' + machines['ipsec1']['ip'] + '''
     ''' + leftrsasigkey + '''
     rightid=@east
-    right=192.1.2.45
+    right=''' + machines['ipsec2']['ip'] + '''
     ''' + rightrsasigkey + '''
     authby=rsasig
     # use auto=start when done testing the tunnel
@@ -199,15 +188,24 @@ conn mytunnel
 			shutit.logout()
 
 		# Just on the first node?
-		for machine_number in (0,):
+		for machine_number in (0,1):
 			shutit.login(command='vagrant ssh ' + sorted(machines.keys())[machine_number])
 			shutit.login(command='sudo su -',password='vagrant')
+			shutit.send('strace -f -o /tmp/out /usr/local/libexec/ipsec/pluto --config /etc/ipsec.conf --nofork &')
 			# Then ensure the connection loaded:
-			shutit.send('ipsec auto --add mytunnel')
+			shutit.send('ipsec auto --add mytunnel &')
 			# And then try and bring up the tunnel:
-			shutit.send('ipsec auto --up mytunnel')
+			shutit.send('ipsec auto --up mytunnel &')
 			shutit.logout()
 			shutit.logout()
+
+		shutit.login(command='vagrant ssh ' + sorted(machines.keys())[0])
+		shutit.login(command='sudo su -',password='vagrant')
+		shutit.pause_point('ok?')
+		shutit.logout()
+		shutit.logout()
+
+		
 
 
 
